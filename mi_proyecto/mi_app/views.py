@@ -4,7 +4,9 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.models import User
 import re
-from django.utils.html import escape
+from .models import BandaPop
+from django.shortcuts import get_object_or_404
+from django.core.paginator import Paginator
 
 
 def login_view(request):
@@ -25,49 +27,6 @@ def logout_view(request):
     logout(request)
     return redirect('login')
 
-@login_required
-def home(request):
-    bandas_pop = [
-        "ABBA", "Adele", "Ariana Grande", "Backstreet Boys", "Bananarama",
-        "Beyoncé", "Billie Eilish", "Blackpink", "Britney Spears", "Bruno Mars",
-        "Camila Cabello", "Carly Rae Jepsen", "Coldplay", "Dua Lipa", "Ed Sheeran",
-        "Ellie Goulding", "Enrique Iglesias", "Fifth Harmony", "Florence + The Machine", "George Michael",
-        "Gwen Stefani", "Harry Styles", "Halsey", "Imagine Dragons", "INXS",
-        "James Blunt", "Janet Jackson", "Jason Mraz", "Jennifer Lopez", "Jessie J",
-        "Jonas Brothers", "Justin Bieber", "Katy Perry", "Kelly Clarkson", "Kylie Minogue",
-        "Lady Gaga", "Lana Del Rey", "Little Mix", "Lorde", "Luis Fonsi",
-        "Madonna", "Mariah Carey", "Maroon 5", "Miley Cyrus", "Niall Horan",
-        "NSYNC", "Olivia Rodrigo", "One Direction", "OneRepublic", "P!nk",
-        "Paramore", "Pharrell Williams", "Post Malone", "Rihanna", "Robbie Williams",
-        "Rosalía", "Sabrina Carpenter", "Sam Smith", "Selena Gomez", "Shakira",
-        "Shawn Mendes", "Sia", "Spice Girls", "Sugababes", "Take That",
-        "Taylor Swift", "The Chainsmokers", "The Weeknd", "Tove Lo", "Troye Sivan",
-        "Twice", "U2", "Usher", "Vance Joy", "Vanessa Carlton",
-        "Walk The Moon", "Whitney Houston", "Zara Larsson", "Zayn Malik", "BTS",
-        "EXO", "Red Velvet", "TXT", "Super Junior", "Monsta X",
-        "CNCO", "Morat", "Reik", "Ha*Ash", "Jesse & Joy",
-        "Axel", "Lali", "Tini", "Karol G", "RBD",
-        "Camilo", "Danny Ocean", "Sebastián Yatra", "Danna Paola", "Aitana"
-    ]
-
-    query = request.GET.get('q', '')
-    bandas_filtradas = bandas_pop
-
-    if query:
-        try:
-            regex = re.compile(query, re.IGNORECASE)
-            bandas_filtradas = [banda for banda in bandas_pop if regex.search(banda)]
-        except re.error:
-            messages.error(request, f'Expresión regular inválida: "{escape(query)}"')
-
-    return render(request, 'home.html', {
-        'bandas_pop': bandas_filtradas,
-        'query': query
-    })
-    
-    return render(request, 'home.html', {'bandas_pop': bandas_pop})
-
-
 def register_view(request):
     if request.method == 'POST':
         username = request.POST['username']
@@ -82,3 +41,60 @@ def register_view(request):
             return redirect('login')
 
     return render(request, 'register.html')
+
+from django.core.paginator import Paginator
+import re
+
+@login_required
+def home(request):
+    query = request.GET.get('q', '')
+    page_number = request.GET.get('page')
+
+    bandas = BandaPop.objects.all()
+
+    if query:
+        try:
+            regex = re.compile(query, re.IGNORECASE)
+            bandas = [b for b in bandas if regex.search(b.nombre)]
+        except re.error:
+            bandas = []
+            messages.error(request, 'Expresión regular inválida')
+
+    paginator = Paginator(bandas, 10)  # 10 bandas por página
+    page_obj = paginator.get_page(page_number)
+
+    return render(request, 'home.html', {
+        'page_obj': page_obj,
+        'query': query,
+    })
+
+
+@login_required
+def crear_banda(request):
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre')
+        if nombre:
+            BandaPop.objects.create(nombre=nombre)
+            return redirect('home')
+    return render(request, 'crear_banda.html')
+
+@login_required
+def editar_banda(request, banda_id):
+    banda = get_object_or_404(BandaPop, id=banda_id)
+    if request.method == 'POST':
+        nuevo_nombre = request.POST.get('nombre')
+        if nuevo_nombre:
+            banda.nombre = nuevo_nombre
+            banda.save()
+            return redirect('home')
+    return render(request, 'editar_banda.html', {'banda': banda})
+
+@login_required
+def eliminar_banda(request, banda_id):
+    banda = get_object_or_404(BandaPop, id=banda_id)
+    if request.method == 'POST':
+        banda.delete()
+        return redirect('home')
+    return render(request, 'eliminar_banda.html', {'banda': banda})
+
+
